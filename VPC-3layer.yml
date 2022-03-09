@@ -1,0 +1,355 @@
+## running perfectly###
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: VPC STACK 3 tire archi
+
+Parameters:
+  environmentValue:
+    Type: String
+    Description: "Define environment value"
+
+  AMIvalue:
+    Type: String
+    Description: "default ami type is linux"
+    Default: ami-0fb653ca2d3203ac1
+  
+  # vpcName:
+  #   Type: String
+  #   Description: VPC name according environment
+  
+  # gatewayName:
+  #   Type: String
+  #   Description: VPC name according environment
+
+  publicCIDR:
+    Type: String
+    AllowedValues:
+      - 10.0.1.0/24
+      - 10.0.2.0/24
+      - 10.0.3.0/24
+  
+  middleCIDR:
+    Type: String
+    AllowedValues:
+      - 10.0.1.0/24
+      - 10.0.2.0/24
+      - 10.0.3.0/24
+  
+  dataCIDR:
+    Type: String
+    AllowedValues:
+      - 10.0.1.0/24
+      - 10.0.2.0/24
+      - 10.0.3.0/24
+  
+  AvailabilityZone:
+    Type: String
+    Default: us-east-2a
+
+
+  InstanceTypeParameter:
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - m1.small
+      - m1.large
+    Description: Enter t2.micro, m1.small, or m1.large. Default is t2.micro.
+
+############################################################################
+###---------------------------VPC---------------------------------------###
+############################################################################
+Resources:
+  Publicvpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${environment}-VPC
+            - environment: !Ref environmentValue
+
+############################################################################
+###---------------------------Gateway------------------------------------###
+############################################################################  
+
+  Publicgateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${environment}-gateway
+            - environment: !Ref environmentValue
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: 
+        Ref: Publicvpc
+      InternetGatewayId: 
+        Ref: Publicgateway
+
+############################################################################
+###---------------------------SUBNETS------------------------------------###
+############################################################################
+  Publicsubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Ref: AvailabilityZone
+      VpcId: 
+        Ref: Publicvpc
+      CidrBlock: 
+        Ref: publicCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${environment}-public-subnet 
+            - environment: !Ref environmentValue
+  
+  Middlesubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+          Ref: AvailabilityZone
+      VpcId: 
+        Ref: Publicvpc
+      CidrBlock:
+        Ref: middleCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${environment}-middle-subnet 
+            - environment: !Ref environmentValue
+  
+  Datasubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: true 
+      AvailabilityZone:
+        Ref: AvailabilityZone
+      VpcId: 
+        Ref: Publicvpc
+      CidrBlock:
+        Ref: dataCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${environment}-data-subnet 
+            - environment: !Ref environmentValue
+  
+############################################################################
+###---------------------------Nat Gateway--------------------------------###
+############################################################################
+
+
+  NAT:
+   Type: AWS::EC2::NatGateway
+   Properties:
+      AllocationId:
+         Fn::GetAtt:
+         - EIP
+         - AllocationId
+      SubnetId:
+         Ref: Publicsubnet
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${environment}-Nat-gateway-public
+            - environment: !Ref environmentValue
+  EIP:
+   DependsOn: AttachGateway
+   Type: AWS::EC2::EIP
+   Properties:
+      Domain: vpc
+
+  NAT2:
+   Type: AWS::EC2::NatGateway
+   Properties:
+      AllocationId:
+         Fn::GetAtt:
+         - EIP2
+         - AllocationId
+      SubnetId:
+         Ref: Middlesubnet
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${environment}-Nat-gateway-middle 
+            - environment: !Ref environmentValue
+  EIP2:
+   DependsOn: AttachGateway
+   Type: AWS::EC2::EIP
+   Properties:
+      Domain: vpc
+
+  
+
+  
+
+############################################################################
+###---------------------------Rout-tables--------------------------------###
+############################################################################
+
+  Publictable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: Publicvpc 
+      Tags:
+        - Key: Name
+          Value: Publictable
+
+  Privatetable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId:
+          Ref: Publicvpc 
+        Tags:
+          - Key: Name
+            Value: Publictabl
+  
+  Privatetable2:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId:
+          Ref: Publicvpc 
+        Tags:
+          - Key: Name
+            Value: Publictabl
+
+############################################################################
+###---------------------------ROUTES-------------------------------------###
+############################################################################
+  Publicsubnetassociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: 
+        Ref: Publicsubnet
+      RouteTableId:
+        Ref: Publictable 
+      
+  Privatecsubnetassociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: 
+        Ref: Middlesubnet
+      RouteTableId:
+        Ref: Privatetable 
+
+
+  Privatecsubnetassociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: 
+        Ref: Datasubnet
+      RouteTableId:
+        Ref: Privatetable2
+
+  
+  Publicroute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: Publictable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: Publicgateway
+        
+
+  PrivateRoute1:
+   Type: AWS::EC2::Route
+   Properties:
+      RouteTableId:
+         Ref: Privatetable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+         Ref: NAT
+
+  PrivateRoute2:
+   Type: AWS::EC2::Route
+   Properties:
+      RouteTableId:
+         Ref: Privatetable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+         Ref: NAT2
+
+############################################################################
+###---------------------------Security-group-----------------------------###
+############################################################################
+  
+  AllowSSH:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Allow SSSH
+      GroupDescription: "allow server to ssh"
+      VpcId:
+        Ref:  Publicvpc
+      SecurityGroupIngress:
+        IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name 
+          Value: AllowSSH
+
+
+
+############################################################################
+###---------------------------Servers------------------------------------###
+############################################################################
+  publicserver:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: temp-key
+    
+      ImageId: 
+        Ref: AMIvalue
+      InstanceType:
+        Ref: InstanceTypeParameter 
+      SecurityGroupIds:
+        - Ref: AllowSSH
+      Tags:
+        - Key: Name
+          Value: public-server
+      SubnetId:
+        Ref: Publicsubnet
+  middleserver:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: temp-key
+    
+      ImageId: 
+        Ref: AMIvalue
+      InstanceType:
+        Ref: InstanceTypeParameter  
+      SecurityGroupIds:
+        - Ref: AllowSSH
+      Tags:
+        - Key: Name
+          Value: middle-server
+      SubnetId:
+        Ref: Middlesubnet
+  
+  dataserver:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: temp-key
+    
+      ImageId:
+        Ref: AMIvalue 
+      InstanceType:
+        Ref: InstanceTypeParameter 
+      SecurityGroupIds:
+        - Ref: AllowSSH
+      Tags:
+        - Key: Name
+          Value: data-server
+      SubnetId:
+        Ref: Datasubnet

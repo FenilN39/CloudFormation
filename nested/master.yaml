@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Parameters:
+  VpcCIDR:
+    Description: vpc block
+    Type: String
+    Default: 10.250.0.0/16
+  PublicSubnet1CIDR:
+    Description: public subnet block 1
+    Type: String
+    Default: 10.250.1.0/24
+  PublicSubnet2CIDR:
+    Description: public subnet block 2
+    Type: String
+    Default: 10.250.2.0/24
+  PrivateSubnet1CIDR:
+    Description: private subnet block 1
+    Type: String
+    Default: 10.250.3.0/24
+  PrivateSubnet2CIDR:
+    Description: private subnet block 2
+    Type: String
+    Default: 10.250.4.0/24
+  AvailabilityZone1:
+    Description: Please select an Availability Zone
+    Type: "AWS::EC2::AvailabilityZone::Name"
+    Default: "us-east-2a"
+  AvailabilityZone2:
+    Description: Please select a second Availability Zone
+    Type: "AWS::EC2::AvailabilityZone::Name"  ## will show all availabale zons in region
+    Default: "us-east-2b"
+  SecurityGroupIngressCIDR:
+    Description: ingress block
+    Type: String
+  EC2ImageId:
+    Description: ubuntu server 20 AMI
+    Type: String
+    Default: "ami-0fb653ca2d3203ac1"
+  EC2InstanceSize:
+    Description: "Size of the EC2 instance"
+    Type: String
+    Default: "t2.micro"
+  KeyPair:
+    Description: select key
+    Type: "AWS::EC2::KeyPair::KeyName"  ## it will find aall available keypair name in that refion
+    ConstraintDescription: "must be the name of an existing EC2 KeyPair."
+  CFNTemplatesS3Bucket:
+    Description: Name of the S3 bucket where cloud formation templates are stored.
+    Type: String
+
+Resources:
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://nodejsbucket39.s3.us-east-2.amazonaws.com/vpc.yaml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName  ## it will take name of the stack which we will provide in cloudformation stack name 
+        VpcCIDR: !Ref VpcCIDR
+        PublicSubnet1CIDR: !Ref PublicSubnet1CIDR
+        PublicSubnet2CIDR: !Ref PublicSubnet2CIDR
+        PrivateSubnet1CIDR: !Ref PrivateSubnet1CIDR
+        PrivateSubnet2CIDR: !Ref PrivateSubnet2CIDR
+        AvailabilityZone1: !Ref AvailabilityZone1
+        AvailabilityZone2: !Ref AvailabilityZone2
+
+  SecurityGroups:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://nodejsbucket39.s3.us-east-2.amazonaws.com/security-groups.yaml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        VPC: !GetAtt VPC.Outputs.VPC
+        IngressCIDR: !Ref SecurityGroupIngressCIDR
+
+  EC2Instance:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://nodejsbucket39.s3.us-east-2.amazonaws.com/ec2.yaml
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        SubnetId: !GetAtt VPC.Outputs.PublicSubnet1
+        SecurityGroupId: !GetAtt SecurityGroups.Outputs.AppserverSecurityGroup
+        KeyPair: !Ref KeyPair
+        EC2ImageId: !Ref EC2ImageId
+        EC2InstanceSize: !Ref EC2InstanceSize

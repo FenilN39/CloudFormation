@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This stack creates a EC2 windows server 2016 instance.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+  SubnetId:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in which the EC2 instance will be provisioned.
+    Type: AWS::EC2::Subnet::Id
+  SecurityGroupId:
+    Description: Name of the SecurityGroup for the EC2 instance
+    Type: AWS::EC2::SecurityGroup::Id
+  KeyPair:
+    Description: "Name of an existing EC2 KeyPair to enable SSH/RDP access to the instance"
+    Type: "AWS::EC2::KeyPair::KeyName"
+    ConstraintDescription: "must be the name of an existing EC2 KeyPair."
+  EC2InstanceSize:
+    Description: "Size of the EC2 instance"
+    Type: String
+  EC2ImageId:
+    Description: "ImageId of the EC2 Windows Instance in this Region"
+    Type: String
+Resources:
+  AppServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      KeyName: !Ref KeyPair
+      ImageId: !Ref EC2ImageId
+      InstanceType: !Ref EC2InstanceSize
+      Monitoring: false
+      SubnetId: !Ref SubnetId
+      SecurityGroupIds:
+        - !Ref SecurityGroupId
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo apt update -y
+          sudo apt install apt-transport-https ca-certificates curl software-properties-common
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu bionic stable"
+          sudo apt update
+          apt-cache policy docker-ce
+          sudo apt install docker-ce
+          sudo usermod -aG docker ubuntu
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          sudo docker–compose --version
+          
+
+
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ec2-instance
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: "EC2S3InstanceProfile"
+      Roles:
+        - !Ref EC2S3Role
+
+  EC2S3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-EC2S3Role-${AWS::Region}
+      AssumeRolePolicyDocument: |
+        {
+            "Statement": [{
+                "Action": "sts:AssumeRole",
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "ec2.amazonaws.com"
+                }
+            }]
+        }
+      Policies:
+        - PolicyName: ec2-service
+          PolicyDocument: !Sub |
+            {
+                "Statement": [{
+                    "Effect": "Allow",
+                    "Action": [
+                      "s3:*"
+                    ],
+                    "Resource": "*"
+                }]
+            }
+
+Outputs:
+  AppServer:
+    Description: public IP address of EC2 instance
+    Value: !GetAtt AppServer.PublicIp
